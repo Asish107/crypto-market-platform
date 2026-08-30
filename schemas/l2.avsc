@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "L2Event",
+  "namespace": "market.raw",
+  "doc": "A level2_batch snapshot or delta. The changes array is carried as a JSON string so the raw layer never needs a schema migration when Coinbase adds a field.",
+  "fields": [
+    {"name": "sequence",    "type": "long"},
+    {"name": "product_id",  "type": "string"},
+    {"name": "event_type",  "type": "string", "doc": "snapshot | l2update"},
+    {"name": "payload",     "type": "string", "doc": "JSON: {\"changes\":[[side,price,size],...]} or {\"bids\":[...],\"asks\":[...]}"},
+    {"name": "event_time",  "type": "string"},
+    {"name": "ingest_time", "type": "string"}
+  ]
+}

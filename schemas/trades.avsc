@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "Trade",
+  "namespace": "market.raw",
+  "doc": "One executed match from the Coinbase `matches` channel. Raw layer: all numerics stay strings, all times stay RFC3339 strings. Casting is staging's job.",
+  "fields": [
+    {"name": "sequence",       "type": "long",   "doc": "Per-product feed sequence number. Gaps here are the whole point of stg_heartbeats."},
+    {"name": "product_id",     "type": "string", "doc": "e.g. BTC-USD. Also the Pub/Sub ordering key."},
+    {"name": "trade_id",       "type": "long",   "doc": "Exchange trade id. Dedupe key downstream."},
+    {"name": "price",          "type": "string"},
+    {"name": "size",           "type": "string"},
+    {"name": "side",           "type": "string", "doc": "maker side as reported by the exchange: buy|sell"},
+    {"name": "maker_order_id", "type": "string", "default": "", "doc": "Empty string when absent. A nullable union would be encoded in Avro JSON as {\"string\":\"...\"} rather than a bare value, which makes the lake bytes awkward to parse for no benefit - these ids are always present on a match."},
+    {"name": "taker_order_id", "type": "string", "default": ""},
+    {"name": "event_time",     "type": "string", "doc": "Exchange-stamped time."},
+    {"name": "ingest_time",    "type": "string", "doc": "Local receive time. event_time - ingest_time is ingest_lag_ms."}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "type": "record",
+  "name": "Heartbeat",
+  "namespace": "market.raw",
+  "doc": "Liveness beat. Absence for >10s is the silent-stall signal.",
+  "fields": [
+    {"name": "sequence",      "type": "long"},
+    {"name": "product_id",    "type": "string"},
+    {"name": "last_trade_id", "type": "long"},
+    {"name": "event_time",    "type": "string"},
+    {"name": "ingest_time",   "type": "string"}
+  ]
+}

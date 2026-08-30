@@ -1,0 +1,25 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+# The consumer parses untrusted JSON off a socket; make that boundary explicit
+# rather than letting Any leak through the whole package.
+disallow_any_explicit = false
+
+# Neither ships type information. The boundary is narrow and deliberate:
+# sortedcontainers is used only in book.py, google.cloud only in publisher.py
+# and metrics.py, and both are wrapped behind typed interfaces of our own.
+[[tool.mypy.overrides]]
+module = ["google.*", "google.cloud.*", "sortedcontainers.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["ingest/tests"]

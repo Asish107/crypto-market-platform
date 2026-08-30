@@ -1,0 +1,4 @@
+# Copy to terraform.tfvars (gitignored) for local plans.
+# Find the billing account: gcloud billing projects describe dataengproj01
+billing_account = "XXXXXX-XXXXXX-XXXXXX"
+alert_email     = "leovijay107@gmail.com"

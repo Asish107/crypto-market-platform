@@ -1,0 +1,114 @@
+# ---------------------------------------------------------------------------
+# The always-on ingest VM. Container-Optimized OS runs one container and
+# restarts it on exit - no systemd unit to write, no OS to patch, and a
+# read-only root filesystem by default.
+#
+# This is the only always-on compute in the platform (~$13/mo). Everything
+# else is scheduled or scale-to-zero.
+# ---------------------------------------------------------------------------
+
+resource "google_artifact_registry_repository" "images" {
+  project       = var.project_id
+  location      = var.region
+  repository_id = "market-images"
+  format        = "DOCKER"
+  description   = "Consumer images, tagged by commit SHA."
+  labels        = var.labels
+
+  # Keep the last few builds for rollback; anything older is dead weight.
+  cleanup_policies {
+    id     = "keep-recent"
+    action = "KEEP"
+    most_recent_versions {
+      keep_count = 10
+    }
+  }
+}
+
+resource "google_artifact_registry_repository_iam_member" "puller" {
+  project    = var.project_id
+  location   = google_artifact_registry_repository.images.location
+  repository = google_artifact_registry_repository.images.name
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${var.service_account_email}"
+}
+
+locals {
+  container_spec = {
+    spec = {
+      containers = [{
+        name  = "consumer"
+        image = var.image
+        env = [
+          { name = "GCP_PROJECT", value = var.project_id },
+          { name = "PRODUCTS", value = join(",", var.products) },
+          { name = "PUBLISH_ENABLED", value = "true" },
+          { name = "METRICS_ENABLED", value = "true" },
+        ]
+        stdin = false
+        tty   = false
+      }]
+      # Always: the consumer is expected to run forever, and a crash should be
+      # a blip in the reconnect metric rather than a silent end to ingestion.
+      restartPolicy = "Always"
+    }
+  }
+}
+
+resource "google_compute_instance" "ingest" {
+  count = var.enabled ? 1 : 0
+
+  project      = var.project_id
+  name         = "market-ingest-${var.env}"
+  machine_type = var.machine_type
+  zone         = var.zone
+  labels       = merge(var.labels, { container-vm = "cos" })
+
+  boot_disk {
+    initialize_params {
+      image = "cos-cloud/cos-stable"
+      size  = 10
+      type  = "pd-balanced"
+    }
+  }
+
+  network_interface {
+    network = "default"
+    # An ephemeral external IP purely for egress to the exchange. Cloud NAT
+    # would be the tidier answer at ~$32/mo, which is more than the rest of
+    # the platform combined for a single outbound connection.
+    access_config {}
+  }
+
+  service_account {
+    email = var.service_account_email
+    # cloud-platform + IAM is the current pattern; legacy per-API scopes are a
+    # second, weaker authorisation layer that hides real IAM errors behind
+    # confusing scope errors.
+    scopes = ["cloud-platform"]
+  }
+
+  metadata = {
+    gce-container-declaration = yamlencode(local.container_spec)
+    google-logging-enabled    = "true"
+    google-monitoring-enabled = "true"
+  }
+
+  # The consumer is stateless: everything it knows is either in flight to
+  # Pub/Sub or rebuildable from a fresh snapshot. Losing the VM costs a
+  # reconnect, not data.
+  allow_stopping_for_update = true
+
+  shielded_instance_config {
+    enable_secure_boot          = true
+    enable_vtpm                 = true
+    enable_integrity_monitoring = true
+  }
+
+  lifecycle {
+    precondition {
+      condition     = !var.enabled || var.image != ""
+      error_message = "ingest_vm is enabled but no image was provided. Push an image and set var.image to its SHA-tagged URL."
+    }
+  }
+}

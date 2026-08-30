@@ -1,0 +1,109 @@
+name: pr
+
+on:
+  pull_request:
+    branches: [main]
+
+# Keyless auth. There is no GCP service account JSON anywhere in this repo's
+# secrets, and there never will be.
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+concurrency:
+  group: pr-${{ github.head_ref }}
+  cancel-in-progress: true
+
+env:
+  TF_VERSION: "1.11.1"
+  PROJECT_ID: dataengproj01
+  REGION: us-central1
+
+jobs:
+  python:
+    name: python lint + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r ingest/requirements.txt -r ingest/requirements-dev.txt
+      - name: ruff
+        run: ruff check ingest streaming orchestration
+      - name: ruff format check
+        run: ruff format --check ingest streaming orchestration
+      - name: mypy
+        run: mypy ingest/src
+      - name: pytest
+        # Includes the recorded-WebSocket replay suite: a captured session with
+        # injected trade gaps, duplicates and a mid-stream reconnect, fed
+        # through the consumer with assertions on every one.
+        run: pytest ingest/tests -q
+
+      - name: docker build
+        run: docker build -t consumer:${{ github.sha }} ingest
+
+  terraform:
+    name: terraform validate + plan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, prod]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOYER_SA }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: fmt
+        run: terraform fmt -check -recursive infra
+
+      - name: init
+        working-directory: infra/envs/${{ matrix.env }}
+        run: terraform init -backend-config="bucket=${{ env.PROJECT_ID }}-tfstate"
+
+      - name: validate
+        working-directory: infra/envs/${{ matrix.env }}
+        run: terraform validate
+
+      - name: plan
+        id: plan
+        working-directory: infra/envs/${{ matrix.env }}
+        run: |
+          terraform plan -no-color -input=false -lock-timeout=5m \
+            -var="billing_account=${{ vars.BILLING_ACCOUNT }}" \
+            -var="alert_email=${{ vars.ALERT_EMAIL }}" \
+            -out=tfplan 2>&1 | tee plan.txt
+          echo "exitcode=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: comment plan on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let plan = fs.readFileSync('infra/envs/${{ matrix.env }}/plan.txt', 'utf8');
+            // GitHub comments cap at 65536 chars; keep the tail, which is where
+            // the summary line lives.
+            if (plan.length > 60000) plan = '...truncated...\n' + plan.slice(-60000);
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `### terraform plan — \`${{ matrix.env }}\`\n\n<details><summary>show plan</summary>\n\n\`\`\`terraform\n${plan}\n\`\`\`\n\n</details>`,
+            });
+
+  # Phase 3 turns this on: dbt Slim CI against the `ci` dataset with --defer
+  # against the prod manifest, so only modified models and their children build.
+  # dbt:
+  #   name: dbt slim ci
+  #   ...

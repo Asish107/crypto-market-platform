@@ -1,0 +1,15 @@
+{"type": "subscriptions", "channels": []}
+{"type": "snapshot", "product_id": "BTC-USD", "sequence": 1000, "bids": [["100.00", "1.0"], ["99.00", "2.0"]], "asks": [["101.00", "1.5"], ["102.00", "2.5"]]}
+{"type": "heartbeat", "product_id": "BTC-USD", "sequence": 1001, "last_trade_id": 500, "time": "2026-08-30T12:00:00.000000Z"}
+{"type": "match", "product_id": "BTC-USD", "sequence": 1002, "trade_id": 501, "price": "100.50", "size": "0.10", "side": "buy", "maker_order_id": "m-1", "taker_order_id": "t-1", "time": "2026-08-30T12:00:01.000000Z"}
+{"type": "match", "product_id": "BTC-USD", "sequence": 1050, "trade_id": 502, "price": "100.60", "size": "0.20", "side": "sell", "maker_order_id": "m-2", "taker_order_id": "t-2", "time": "2026-08-30T12:00:02.000000Z"}
+{"type": "match", "product_id": "BTC-USD", "sequence": 1099, "trade_id": 503, "price": "100.70", "size": "0.30", "side": "buy", "maker_order_id": "m-3", "taker_order_id": "t-3", "time": "2026-08-30T12:00:03.000000Z"}
+{"type": "match", "product_id": "BTC-USD", "sequence": 1400, "trade_id": 507, "price": "100.90", "size": "0.15", "side": "buy", "maker_order_id": "m-7", "taker_order_id": "t-7", "time": "2026-08-30T12:00:07.000000Z"}
+{"type": "match", "product_id": "BTC-USD", "sequence": 1400, "trade_id": 507, "price": "100.90", "size": "0.15", "side": "buy", "maker_order_id": "m-7", "taker_order_id": "t-7", "time": "2026-08-30T12:00:07.000000Z"}
+{"type": "heartbeat", "product_id": "BTC-USD", "sequence": 1500, "last_trade_id": 510, "time": "2026-08-30T12:00:08.000000Z"}
+{"type": "l2update", "product_id": "BTC-USD", "changes": [["buy", "100.25", "0.75"]], "time": "2026-08-30T12:00:08.000000Z"}
+{"type": "l2update", "product_id": "BTC-USD", "changes": [["buy", "100.25", "0"]], "time": "2026-08-30T12:00:09.000000Z"}
+{"type": "__disconnect__"}
+{"type": "l2update", "product_id": "BTC-USD", "changes": [["buy", "999.00", "5.0"]], "time": "2026-08-30T12:00:20.000000Z"}
+{"type": "snapshot", "product_id": "BTC-USD", "sequence": 7001, "bids": [["200.00", "1.0"]], "asks": [["201.00", "1.0"]]}
+{"type": "match", "product_id": "BTC-USD", "sequence": 9999, "trade_id": 900, "price": "200.50", "size": "0.05", "side": "buy", "maker_order_id": "m-9", "taker_order_id": "t-9", "time": "2026-08-30T12:00:21.000000Z"}
