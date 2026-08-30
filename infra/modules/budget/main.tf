@@ -10,6 +10,18 @@ resource "google_monitoring_notification_channel" "email" {
   }
 }
 
+# Budgets live on the BILLING ACCOUNT, not the project, so no amount of
+# project IAM lets CI manage them. This grant is the reason a `terraform apply`
+# from GitHub Actions can touch the budget at all.
+#
+# Chicken-and-egg: CI cannot grant itself this. Apply it once from a laptop
+# with roles/billing.admin, after which CI is self-sufficient.
+resource "google_billing_account_iam_member" "deployer_cost_manager" {
+  billing_account_id = var.billing_account
+  role               = "roles/billing.costsManager"
+  member             = "serviceAccount:${var.deployer_sa_email}"
+}
+
 # The Budgets API normalises a project ID into a project NUMBER on read. Writing
 # the ID here means every plan shows a phantom diff forever, which trains people
 # to ignore plan output - the exact opposite of what a plan is for.

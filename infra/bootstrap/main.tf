@@ -41,6 +41,7 @@ resource "google_project_service" "required" {
     "monitoring.googleapis.com",
     "logging.googleapis.com",
     "billingbudgets.googleapis.com",
+    "cloudbilling.googleapis.com", # needed to READ billing account IAM, distinct from billingbudgets
     "artifactregistry.googleapis.com",
     "run.googleapis.com",
     "secretmanager.googleapis.com",

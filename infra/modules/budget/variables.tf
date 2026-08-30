@@ -8,3 +8,8 @@ variable "monthly_budget_usd" {
 }
 
 variable "alert_email" { type = string }
+
+variable "deployer_sa_email" {
+  type        = string
+  description = "CI deployer. Needs a role on the BILLING ACCOUNT itself - project-level roles grant nothing over budgets, because billing accounts sit outside the project hierarchy."
+}

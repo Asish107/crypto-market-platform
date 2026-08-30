@@ -123,4 +123,5 @@ module "budget" {
   env                = local.env
   monthly_budget_usd = 75
   alert_email        = var.alert_email
+  deployer_sa_email  = module.iam.deployer_sa_email
 }

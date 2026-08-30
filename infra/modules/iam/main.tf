@@ -65,6 +65,7 @@ resource "google_project_iam_member" "deployer" {
     "roles/monitoring.editor",
     "roles/compute.admin",
     "roles/serviceusage.serviceUsageAdmin",
+    "roles/artifactregistry.admin",
   ])
 
   project = var.project_id
