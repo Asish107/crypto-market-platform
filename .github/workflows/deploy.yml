@@ -69,6 +69,10 @@ jobs:
           service_account: ${{ vars.DEPLOYER_SA }}
 
       - uses: google-github-actions/setup-gcloud@v2
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
       - run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
       - name: build and push
