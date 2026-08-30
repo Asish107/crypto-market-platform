@@ -1,0 +1,60 @@
+name: market
+version: "1.0.0"
+config-version: 2
+profile: market
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+vars:
+  # How far back incremental models reprocess. Late data past this window is
+  # not picked up, so the choice is a real SLA, not a default.
+  #
+  # 3 days: the exchange replays on reconnect and Pub/Sub retains for 7, so
+  # anything arriving later than 3 days is a recovery scenario handled by an
+  # explicit backfill, not by the hourly run silently doing more work.
+  lookback_days: 3
+
+  # NOTE: there was a `min_real_trade_id: 1e9` var here to exclude synthetic
+  # rows. It silently deleted ETH-USD and SOL-USD entirely - their trade id
+  # counters are per-product and sit at ~839M and ~351M, well below a threshold
+  # chosen by looking only at BTC. Every test still passed, because BTC's
+  # contiguity was perfect and nothing checked that all products were present.
+  # assert_all_products_present now does.
+  #
+  # The lesson: never filter real data with a magic number inferred from one
+  # sample of it. Name the exceptions instead.
+
+  # Rows published by hand while bootstrapping Phase 1, before there was a
+  # consumer. They carry real product ids and plausible trade ids, so no
+  # heuristic distinguishes them - they have to be named.
+  #
+  # A magic list like this is a smell, and the fix is upstream: scripts/
+  # smoke_test.sh now publishes as TEST-USD, which staging filters out by
+  # product. This list covers only the rows that predate that change and
+  # should never grow.
+  synthetic_trade_ids: [1788112582, 999999]
+
+  # The products this platform is for. Anything else on the topic - a smoke
+  # test, a stray publish - is not market data and must not reach a mart.
+  tracked_products: ['BTC-USD', 'ETH-USD', 'SOL-USD']
+
+models:
+  market:
+    +persist_docs:
+      relation: true
+      columns: true
+    staging:
+      +materialized: view
+      +schema: staging
+    intermediate:
+      +materialized: view
+      +schema: intermediate
+    marts:
+      +materialized: incremental
+      +schema: marts

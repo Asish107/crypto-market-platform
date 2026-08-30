@@ -30,3 +30,9 @@ transform/logs/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+
+# dbt
+transform/target/
+transform/dbt_packages/
+transform/logs/
+transform/.user.yml

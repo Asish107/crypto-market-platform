@@ -1,0 +1,114 @@
+version: 2
+
+models:
+  - name: fct_trades
+    description: >
+      Deduped tick tape, one row per executed trade. The source of truth for
+      every price and volume figure in the platform.
+    config:
+      contract:
+        enforced: true
+      # A contracted incremental model must declare this explicitly. `fail` is
+      # the right choice here: an unexpected column change should stop the
+      # build, not be silently absorbed into a table people trust.
+      on_schema_change: fail
+
+    columns:
+      - name: trade_id
+        data_type: int64
+        description: Exchange trade id. Contiguous per product - the basis of gap detection.
+        constraints:
+          - type: not_null
+        data_tests:
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+
+      - name: product_id
+        data_type: string
+        constraints:
+          - type: not_null
+        data_tests:
+          - accepted_values:
+              values: ['BTC-USD', 'ETH-USD', 'SOL-USD']
+
+      - name: sequence
+        data_type: int64
+        description: >
+          Coinbase's per-product event counter. Recorded for completeness but
+          NOT used for continuity - it counts events on channels we do not
+          subscribe to. See ADR 0007.
+
+      - name: price
+        data_type: numeric
+        constraints:
+          - type: not_null
+        data_tests:
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+          # Distributional guard. Not a business rule - a tripwire for a
+          # decimal-place or unit error, which is the failure that silently
+          # corrupts every downstream number.
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0.0001
+              max_value: 10000000
+
+      - name: size
+        data_type: numeric
+        constraints:
+          - type: not_null
+        data_tests:
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+
+      - name: notional
+        data_type: numeric
+        description: price * size, in quote currency.
+
+      - name: side
+        data_type: string
+        description: The MAKER's side, as reported by the exchange.
+        data_tests:
+          - accepted_values:
+              values: ['buy', 'sell']
+
+      - name: taker_side
+        data_type: string
+        description: >
+          The aggressor's side - the inverse of `side`. This is what "buy
+          volume" means in every downstream imbalance metric.
+        data_tests:
+          - accepted_values:
+              values: ['buy', 'sell']
+
+      - name: maker_order_id
+        data_type: string
+      - name: taker_order_id
+        data_type: string
+
+      - name: event_time
+        data_type: timestamp
+        constraints:
+          - type: not_null
+
+      - name: ingest_time
+        data_type: timestamp
+        constraints:
+          - type: not_null
+
+      - name: ingest_lag_ms
+        data_type: int64
+        description: >
+          Exchange event time to local receive time. Legitimately NEGATIVE
+          under clock skew; not clamped, because that would hide a real
+          operational problem.
+
+      - name: event_minute
+        data_type: timestamp
+      - name: event_date
+        data_type: date
+        constraints:
+          - type: not_null
+
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [trade_id, product_id]

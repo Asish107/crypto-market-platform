@@ -1,0 +1,27 @@
+# Committed on purpose: it contains no credentials. Auth is Application
+# Default Credentials locally and Workload Identity Federation in CI, so
+# there is no key file to keep out of the repo.
+market:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT', 'dataengproj01') }}"
+      dataset: "{{ env_var('DBT_DATASET', 'staging') }}"
+      location: us-central1
+      threads: 4
+      priority: interactive
+      job_execution_timeout_seconds: 600
+      job_retries: 1
+
+    # Slim CI writes into an ephemeral dataset with a 24h table expiry, so a
+    # failed PR run cannot leave debris behind.
+    ci:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT', 'dataengproj01') }}"
+      dataset: "ci"
+      location: us-central1
+      threads: 8
+      priority: interactive

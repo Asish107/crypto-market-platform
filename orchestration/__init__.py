@@ -1,1 +1,1 @@
-"""Dagster definitions (Phase 3)."""
+"""Dagster orchestration for the market data platform."""

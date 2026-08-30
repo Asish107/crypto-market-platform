@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# Proves the Phase 1 skeleton actually carries data end to end:
+# Publishes as TEST-USD, never a real product. A synthetic row wearing a real
+# product id lands in fct_trades looking exactly like market data, and breaks
+# trade-id contiguity - which is the measurement the whole platform rests on.
+#
+# Proves the pipeline actually carries data end to end:
 #   publish -> topic (schema validated) -> native GCS sink -> native BQ sink
 #
 # If this passes, the pipeline's spine is real and Phase 2 is only about the
@@ -11,7 +15,7 @@ NOW="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
 SEQ="$(date +%s)"
 
 MSG=$(cat <<JSON
-{"sequence":${SEQ},"product_id":"BTC-USD","trade_id":${SEQ},"price":"64000.00","size":"0.001","side":"buy","maker_order_id":null,"taker_order_id":null,"event_time":"${NOW}","ingest_time":"${NOW}"}
+{"sequence":${SEQ},"product_id":"TEST-USD","trade_id":${SEQ},"price":"64000.00","size":"0.001","side":"buy","maker_order_id":null,"taker_order_id":null,"event_time":"${NOW}","ingest_time":"${NOW}"}
 JSON
 )
 
@@ -19,7 +23,7 @@ echo "==> publishing to market.raw.trades (schema validation happens here)"
 gcloud pubsub topics publish market.raw.trades \
   --project="${PROJECT_ID}" \
   --message="${MSG}" \
-  --ordering-key="BTC-USD"
+  --ordering-key="TEST-USD"
 
 echo "==> BigQuery sink is near-instant; querying raw.trades_stream"
 bq query --project_id="${PROJECT_ID}" --use_legacy_sql=false --format=prettyjson \

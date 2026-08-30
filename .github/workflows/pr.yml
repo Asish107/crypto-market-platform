@@ -102,8 +102,31 @@ jobs:
               body: `### terraform plan — \`${{ matrix.env }}\`\n\n<details><summary>show plan</summary>\n\n\`\`\`terraform\n${plan}\n\`\`\`\n\n</details>`,
             });
 
-  # Phase 3 turns this on: dbt Slim CI against the `ci` dataset with --defer
-  # against the prod manifest, so only modified models and their children build.
-  # dbt:
-  #   name: dbt slim ci
-  #   ...
+  dbt:
+    name: dbt build + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOYER_SA }}
+
+      - run: pip install -r transform/requirements.txt
+      - run: dbt deps --project-dir transform --profiles-dir transform
+
+      - name: dbt build against the ephemeral CI dataset
+        # target=ci writes every model into `ci`, whose tables expire after 24h,
+        # so a failed PR cannot leave debris in a real dataset.
+        #
+        # A FULL build, not Slim CI. Slim CI defers to a production manifest,
+        # which requires a scheduled production run to exist - so it lands with
+        # the Dagster deployment rather than being faked now.
+        env:
+          GCP_PROJECT: ${{ env.PROJECT_ID }}
+        run: dbt build --target ci --project-dir transform --profiles-dir transform

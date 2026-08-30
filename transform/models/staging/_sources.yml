@@ -1,0 +1,43 @@
+version: 2
+
+sources:
+  - name: raw
+    database: dataengproj01
+    schema: raw
+    description: >
+      Native Pub/Sub BigQuery subscription landing. Append-only, never edited.
+      Nothing in dbt may write here.
+
+    tables:
+      - name: trades_stream
+        description: Executed trades from the Coinbase `matches` channel.
+        loaded_at_field: publish_time
+        freshness:
+          warn_after: {count: 5, period: minute}
+          error_after: {count: 60, period: minute}
+
+      - name: l2_stream
+        description: Order book snapshots and deltas from `level2_batch`.
+        loaded_at_field: publish_time
+        freshness:
+          warn_after: {count: 5, period: minute}
+          error_after: {count: 60, period: minute}
+
+      - name: heartbeat_stream
+        description: Liveness beats carrying the exchange's latest trade id.
+        loaded_at_field: publish_time
+        freshness:
+          warn_after: {count: 2, period: minute}
+          error_after: {count: 10, period: minute}
+
+  - name: raw_external
+    database: dataengproj01
+    schema: raw_external
+    description: >
+      External tables over the immutable GCS lake. This is the replay source:
+      every mart must be rebuildable from here alone. Queried by the backfill
+      path, not by the hourly run.
+    tables:
+      - name: trades_lake
+      - name: l2_lake
+      - name: heartbeat_lake
