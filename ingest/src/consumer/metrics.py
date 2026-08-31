@@ -8,6 +8,7 @@ call per trade would cost more than the rest of the platform combined.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 
 log = logging.getLogger(__name__)
@@ -72,6 +73,13 @@ class Counters:
         return out
 
 
+# Cloud Monitoring rejects two points on the same time series less than 10
+# seconds apart. The periodic flusher and the shutdown drain can easily land in
+# the same second, which fails the ENTIRE write - including the metrics that
+# were fine.
+MIN_WRITE_INTERVAL_S = 10.0
+
+
 class MetricsReporter:
     """Writes counters to Cloud Monitoring, or to logs when disabled.
 
@@ -83,10 +91,19 @@ class MetricsReporter:
         self.project_id = project_id
         self.enabled = enabled and bool(project_id)
         self.counters = Counters()
+        self._last_write_at = 0.0
 
-    def flush(self) -> None:
+    def flush(self, force: bool = False) -> None:
         snapshot = self.counters.snapshot()
         if not snapshot:
+            return
+
+        now = time.time()
+        if self.enabled and not force and (now - self._last_write_at) < MIN_WRITE_INTERVAL_S:
+            # Too soon for Monitoring to accept another point. Dropping this
+            # write loses nothing: these are cumulative totals, so the next
+            # flush carries the same information.
+            log.debug("metrics flush skipped, too soon since last write")
             return
 
         if not self.enabled:
@@ -103,9 +120,7 @@ class MetricsReporter:
 
         client = monitoring_v3.MetricServiceClient()
         project = f"projects/{self.project_id}"
-        now = monitoring_v3.types.TimeInterval(
-            {"end_time": {"seconds": int(__import__("time").time())}}
-        )
+        interval = monitoring_v3.types.TimeInterval({"end_time": {"seconds": int(time.time())}})
 
         series_batch = []
         for name, value in snapshot.items():
@@ -114,7 +129,7 @@ class MetricsReporter:
             series.resource.type = "global"
             series.points = [
                 monitoring_v3.types.Point(
-                    {"interval": now, "value": {"double_value": float(value)}}
+                    {"interval": interval, "value": {"double_value": float(value)}}
                 )
             ]
             series_batch.append(series)

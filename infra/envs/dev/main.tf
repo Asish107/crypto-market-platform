@@ -115,6 +115,15 @@ module "ingest_vm" {
   image   = var.ingest_image
 }
 
+module "observability" {
+  source     = "../../modules/observability"
+  project_id = var.project_id
+  env        = local.env
+  products   = var.products
+  # One channel for everything, created by the budget module.
+  notification_channel_id = module.budget.notification_channel_id
+}
+
 module "budget" {
   source             = "../../modules/budget"
   project_id         = var.project_id

@@ -9,3 +9,6 @@ output "dbt_sa" { value = module.iam.dbt_sa_email }
 
 output "image_repository" { value = module.ingest_vm.repository_url }
 output "ingest_instance" { value = module.ingest_vm.instance_name }
+
+output "dashboard" { value = module.observability.dashboard_id }
+output "alert_policies" { value = module.observability.alert_policy_names }

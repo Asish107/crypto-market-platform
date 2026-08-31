@@ -24,8 +24,8 @@ variable "zone" {
 
 variable "products" {
   type        = list(string)
-  description = "Products to subscribe to. dev runs one; prod runs all three."
-  default     = ["BTC-USD"]
+  description = "Products to subscribe to. All three run on one VM - the cost is the VM, not the subscription count, and three is what proves the per-product continuity logic works."
+  default     = ["BTC-USD", "ETH-USD", "SOL-USD"]
 }
 
 variable "ingest_vm_enabled" {
