@@ -173,6 +173,32 @@ makes it look like a flaky cloud rather than a missing dependency edge. The
 agent into existence so this is deterministic. If you see this error, that
 resource has been removed or reordered.
 
+## A deploy stopped the ingestion
+
+Symptom: the feed goes silent shortly after a merge, and CI was green.
+
+Destroying a VM is a perfectly successful `terraform apply`. Green CI means the
+declared state was reached — it says nothing about whether the declared state
+was what you wanted.
+
+1. **Is the VM there at all?**
+   ```bash
+   gcloud compute instances list --project dataengproj01
+   ```
+2. **Check the repo variable.** `INGEST_VM_ENABLED` must be `true`:
+   ```bash
+   gh variable list
+   ```
+   If it is false or unset, the workflow's `|| 'false'` fallback disables the
+   VM on every deploy.
+3. **Re-run the deploy** once fixed. The consumer is stateless; the cost of the
+   outage is the gap, which `fct_data_quality` will show and
+   `scripts/backfill_trades.py` can close.
+
+**Local applies race CI.** In dev, CI owns `ingest_vm_enabled` and
+`ingest_image`. A laptop `terraform apply` will happily roll the VM back to
+whatever image your `terraform.tfvars` pins. Plan locally; let CI apply.
+
 ---
 
 ## The feed is silent
