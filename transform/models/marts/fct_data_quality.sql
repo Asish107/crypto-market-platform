@@ -45,6 +45,7 @@ with trades as (
         trade_id,
         event_time,
         ingest_lag_ms,
+        is_backfilled,
         timestamp_trunc(event_time, HOUR) as event_hour,
         event_date
     from {{ ref('fct_trades') }}
@@ -84,9 +85,14 @@ per_hour as (
         max(trade_id)                                           as last_trade_id,
         max(trade_id) - min(trade_id) + 1                       as trade_id_span,
 
-        approx_quantiles(abs(ingest_lag_ms), 100)[offset(50)]   as p50_ingest_lag_ms,
-        approx_quantiles(abs(ingest_lag_ms), 100)[offset(95)]   as p95_ingest_lag_ms,
-        approx_quantiles(abs(ingest_lag_ms), 100)[offset(99)]   as p99_ingest_lag_ms,
+        -- Live rows only: a backfilled row's lag is the outage duration.
+        approx_quantiles(if(not is_backfilled, abs(ingest_lag_ms), null), 100)[offset(50)] as p50_ingest_lag_ms,
+        approx_quantiles(if(not is_backfilled, abs(ingest_lag_ms), null), 100)[offset(95)] as p95_ingest_lag_ms,
+        approx_quantiles(if(not is_backfilled, abs(ingest_lag_ms), null), 100)[offset(99)] as p99_ingest_lag_ms,
+
+        -- Surfaced rather than hidden: an hour containing recovered trades is
+        -- complete, but it is not the same as an hour that never broke.
+        countif(is_backfilled)                                  as backfilled_trades,
 
         -- Negative lag is our clock running behind the exchange's, not an
         -- error. Surfaced as its own measure rather than hidden by abs().
@@ -118,6 +124,7 @@ select
     h.p95_ingest_lag_ms,
     h.p99_ingest_lag_ms,
     h.negative_lag_rows,
+    h.backfilled_trades,
 
     h.first_trade_id,
     h.last_trade_id,

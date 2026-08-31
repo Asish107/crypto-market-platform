@@ -81,6 +81,17 @@ derived as (
 
         price * size                                     as notional,
 
+        -- Backfilled rows carry sequence = 0: the REST endpoint does not
+        -- expose the feed's sequence, and scripts/backfill_trades.py writes
+        -- zero rather than inventing a plausible value.
+        --
+        -- This matters more than it looks. A backfilled trade has an
+        -- event_time from whenever it happened and an ingest_time of whenever
+        -- we recovered it, so its "lag" is the length of the outage - correct
+        -- arithmetic measuring something entirely different from live latency.
+        -- Mixing the two makes the latency SLA meaningless after any recovery.
+        sequence = 0                                     as is_backfilled,
+
         -- Exchange timestamp to our receive time. Can be NEGATIVE when our
         -- clock runs behind the exchange's; that is clock skew, and hiding it
         -- by clamping to zero would hide a genuine operational problem.
@@ -112,6 +123,7 @@ select
     size,
     side,
     notional,
+    is_backfilled,
     maker_order_id,
     taker_order_id,
     event_time,

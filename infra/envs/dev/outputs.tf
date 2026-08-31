@@ -12,3 +12,7 @@ output "ingest_instance" { value = module.ingest_vm.instance_name }
 
 output "dashboard" { value = module.observability.dashboard_id }
 output "alert_policies" { value = module.observability.alert_policy_names }
+
+output "streaming_subscription" { value = module.pubsub.streaming_subscription }
+
+output "dataflow_sa" { value = module.iam.dataflow_sa_email }

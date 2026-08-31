@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: curated
+    database: dataengproj01
+    schema: curated
+    description: Streaming outputs, written by Dataflow during burst reconciliation runs.
+    tables:
+      - name: bars_1m_stream
+        description: >
+          Every PANE emitted by the streaming job, including restatements after
+          late data. The reconciliation reads the final pane per window;
+          keeping the earlier ones is what makes "did this bar change after it
+          first fired" answerable.

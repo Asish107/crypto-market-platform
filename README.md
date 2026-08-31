@@ -12,8 +12,8 @@ it, replay history from the lake, and get identical marts.
 | **Project** | `dataengproj01` (number `661305133555`) |
 | **Region** | `us-central1` |
 | **Live resources** | 69, all Terraform-managed, zero console clicks |
-| **Status** | Phases 1-4 complete; marts built from live market data |
-| **Cost today** | ~$0/mo (no compute running; ~$34/mo at full build) |
+| **Status** | **All 7 phases complete.** Running continuously. |
+| **Cost** | ~$17.50/mo running; ~$34/mo at full build |
 
 ---
 
@@ -413,12 +413,52 @@ Budget alerts at 50/80/100% of $25 (dev), plus a forecast alert.
 
 ---
 
+## The recovery drill
+
+The only artefact that proves the platform survives failure rather than
+asserting it will. **Executed against the live system on 2026-08-31.**
+
+The consumer VM was killed mid-stream and left dead for 6 minutes 41 seconds.
+3,205 trades were lost — known *exactly*, because `trade_id` is contiguous, so
+the missing range is arithmetic rather than an estimate. Backfilled from the
+exchange REST API through the same Pub/Sub topic as live data. Completeness
+restored to 100.00% in under five minutes.
+
+**And it found a real flaw.** `assert_ingest_lag_within_sla` failed immediately
+*after* the successful recovery: backfilled trades carry an event time from the
+outage and an ingest time from the repair, so their measured latency was the
+length of the outage. The SLA would have failed for as long as recovered rows
+sat in the window — punishing the fix rather than the fault. Recovered rows are
+now marked and excluded from latency, and counted separately so an hour that
+was repaired is visibly distinct from one that never broke.
+
+Full writeup: [docs/recovery-drill.md](docs/recovery-drill.md).
+
 ## Non-negotiables
 
 If scope gets cut, cut marts — never these:
 
-1. Terraform from commit one. No console clicks.
-2. Immutable raw lake with a working replay path.
-3. Tests that fail CI, not tests that exist.
-4. The runbook.
-5. The recovery drill.
+| | Status |
+|---|---|
+| 1. Terraform from commit one. No console clicks. | ✅ 80+ resources, zero clicks |
+| 2. Immutable raw lake with a working replay path. | ✅ external tables over Avro |
+| 3. Tests that fail CI, not tests that exist. | ✅ 37 checks; several caught real bugs |
+| 4. The runbook. | ✅ [16 procedures](docs/runbook.md), each from a real incident |
+| 5. The recovery drill. | ✅ [executed, and it found something](docs/recovery-drill.md) |
+
+## What this cost to learn
+
+Every one of these was found by the platform running against reality, not by
+reading documentation:
+
+| Discovery | Where |
+|---|---|
+| `sequence` is not contiguous on our channels; `trade_id` is | [ADR 0007](docs/adr/0007-trade-id-not-sequence-for-gap-detection.md) |
+| A full L2 snapshot exceeds the 1 MB WebSocket frame default | `config.py` |
+| Avro JSON encodes a nullable union as `{"string": x}`, not a bare value | `schemas/trades.avsc` |
+| Pub/Sub's filename grammar makes the intended lake layout impossible | [ADR 0002](docs/adr/0002-native-sinks-over-dataflow.md) |
+| A `min_real_trade_id` filter silently deleted two of three products | `assert_all_products_present` |
+| Snapshots and updates keep different clocks — 40ms apart | `int_book_state_1m` |
+| Cloud Monitoring rejects two points on one series within 10s | `metrics.py` |
+| cloud-init runs once; config changes need instance replacement | `modules/ingest_vm` |
+| A successful recovery failed the latency SLA | [recovery-drill.md](docs/recovery-drill.md) |

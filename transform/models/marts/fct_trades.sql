@@ -55,6 +55,7 @@ select
     case side when 'sell' then 'buy' when 'buy' then 'sell' end
                                                          as taker_side,
 
+    is_backfilled,
     maker_order_id,
     taker_order_id,
     event_time,

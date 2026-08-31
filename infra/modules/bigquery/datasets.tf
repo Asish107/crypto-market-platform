@@ -7,6 +7,7 @@ locals {
     marts        = "Contract-enforced business facts. dbt-managed."
     elementary   = "dbt test results and anomaly history."
     ci           = "Ephemeral CI datasets. 24h table TTL."
+    curated      = "Streaming outputs. Written by Dataflow, read by the reconciliation model."
   }
 }
 
@@ -29,7 +30,7 @@ resource "google_bigquery_dataset" "this" {
 
 # dbt writes to staging/intermediate/marts/elementary and reads everything else.
 resource "google_bigquery_dataset_iam_member" "dbt_editor" {
-  for_each = toset(["staging", "intermediate", "marts", "elementary", "ci"])
+  for_each = toset(["staging", "intermediate", "marts", "elementary", "ci", "curated"])
 
   project    = var.project_id
   dataset_id = google_bigquery_dataset.this[each.key].dataset_id

@@ -17,3 +17,7 @@ output "gcs_subscriptions" {
 output "bq_subscriptions" {
   value = { for k, s in google_pubsub_subscription.bq : k => s.name }
 }
+
+output "streaming_subscription" {
+  value = google_pubsub_subscription.streaming_trades.id
+}

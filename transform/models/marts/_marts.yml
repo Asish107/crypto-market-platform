@@ -80,6 +80,13 @@ models:
           - accepted_values:
               values: ['buy', 'sell']
 
+      - name: is_backfilled
+        data_type: boolean
+        description: >
+          Recovered from the REST API rather than received live. Their
+          ingest_lag_ms measures the length of the outage, not pipeline
+          latency, so every latency measure excludes them.
+
       - name: maker_order_id
         data_type: string
       - name: taker_order_id

@@ -241,3 +241,28 @@ resource "google_pubsub_topic_iam_member" "ingest_publisher" {
   role    = "roles/pubsub.publisher"
   member  = "serviceAccount:${var.publisher_sa_email}"
 }
+
+
+# ---------------------------------------------------------------------------
+# Streaming subscription for the Dataflow reconciliation job (§6).
+#
+# A SEPARATE subscription, not a shared one: Pub/Sub delivers to each
+# subscription independently, so a burst-run streaming job cannot starve or
+# duplicate what the native sinks receive. Starting and stopping Dataflow has
+# no effect on the always-on path.
+# ---------------------------------------------------------------------------
+resource "google_pubsub_subscription" "streaming_trades" {
+  name    = "market.raw.trades.streaming"
+  project = var.project_id
+  topic   = google_pubsub_topic.raw["trades"].id
+  labels  = var.labels
+
+  # Short retention: this subscription is for burst runs. Retaining a week of
+  # backlog for a job that runs for an hour would mean the first thing it does
+  # on startup is replay days of stale trades into current windows - which
+  # would look exactly like catastrophic lateness.
+  message_retention_duration = "3600s"
+  ack_deadline_seconds       = 60
+
+  expiration_policy { ttl = "" }
+}

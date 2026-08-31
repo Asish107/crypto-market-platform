@@ -224,8 +224,92 @@ order. **One bad message stops that product's entire stream.**
    is automatic once the cause is fixed and the process restarts.
 
 ## *(Phase 3)* dbt failed on fct_bars_1m
-## *(Phase 3)* dbt failed on fct_bars_1m — diagnose and rerun one partition
-## *(Phase 3)* Rebuild the last 7 days from the lake
+## dbt failed on a mart — diagnose and rerun one partition
+
+1. **Read which test failed, not just that the build did.** `dbt build`
+   interleaves runs and tests, so a failing test means the model built and its
+   CHILDREN were skipped - bad data did not propagate. That is the design
+   working.
+2. **Reproduce the failing rows.** Every test compiles to a query returning the
+   offending rows:
+   ```bash
+   dbt test --select assert_no_crossed_book --store-failures \
+     --project-dir transform --profiles-dir transform
+   ```
+   The failures land in a table you can query.
+3. **Rerun one day** once fixed. Models are `insert_overwrite` on the date
+   partition, so this is safe to repeat:
+   ```bash
+   dbt run --select fct_bars_1m \
+     --vars '{"lookback_days": 1}' \
+     --project-dir transform --profiles-dir transform
+   ```
+4. **Full refresh** only if the model's logic changed in a way that invalidates
+   history:
+   ```bash
+   dbt run --select fct_bars_1m+ --full-refresh --project-dir transform --profiles-dir transform
+   ```
+
+## Rebuild everything from the lake
+
+The property the whole design exists to guarantee. `raw_external.*_lake` are
+external tables over the immutable GCS lake, and every mart is a pure function
+of them.
+
+```bash
+# 1. confirm the lake has the range you need
+bq query --use_legacy_sql=false \
+  "SELECT dt, COUNT(*) FROM \`dataengproj01.raw_external.trades_lake\`
+    WHERE dt BETWEEN '2026-08-24' AND '2026-08-31' GROUP BY 1 ORDER BY 1"
+
+# 2. rebuild
+dbt build --full-refresh --project-dir transform --profiles-dir transform
+```
+
+The lake stores the Pub/Sub envelope with the message body as raw bytes
+(ADR 0006), so staging parses JSON out of `data`. That is deliberate: the lake
+holds exactly what the broker received and cannot be invalidated by a later
+schema change.
+
+**What the lake cannot do:** recover data that was never received. An outage
+means the trades never reached anything, so replaying the lake reproduces the
+gap perfectly. That case needs `scripts/backfill_trades.py` - see below.
+
+## Backfill a gap from the exchange
+
+Use when `fct_data_quality` shows missing trades - a consumer outage, a long
+disconnection, a bad deploy.
+
+1. **Find the exact range.** `trade_id` is contiguous, so this is arithmetic,
+   not estimation:
+   ```sql
+   WITH ids AS (
+     SELECT product_id, trade_id,
+            LEAD(trade_id) OVER (PARTITION BY product_id ORDER BY trade_id) AS next_id
+     FROM `dataengproj01.marts.fct_trades`
+     WHERE event_date >= CURRENT_DATE() - 1
+   )
+   SELECT product_id, trade_id AS have_up_to, next_id AS resumed_at,
+          next_id - trade_id - 1 AS missing
+   FROM ids WHERE next_id > trade_id + 1 ORDER BY missing DESC
+   ```
+2. **Dry run first**, to see how many the API will return:
+   ```bash
+   .venv/bin/python scripts/backfill_trades.py \
+     --product BTC-USD --after <have_up_to> --before <resumed_at> --dry-run
+   ```
+3. **Publish.** Backfilled trades go to the SAME topic as live ones, so they
+   pass schema validation, land in both sinks, and dedupe in staging. Re-running
+   is safe.
+   ```bash
+   .venv/bin/python scripts/backfill_trades.py \
+     --product BTC-USD --after <have_up_to> --before <resumed_at>
+   ```
+4. **Rebuild and verify:**
+   ```bash
+   dbt build --project-dir transform --profiles-dir transform
+   ```
+   `assert_trade_ids_contiguous` passing is the proof the gap is closed.
 ## Trade gaps spiked — is the data usable?
 
 1. **Which detector fired?** They mean different things:

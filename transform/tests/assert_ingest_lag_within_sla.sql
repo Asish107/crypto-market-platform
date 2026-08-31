@@ -16,6 +16,11 @@ with lag_percentiles as (
         approx_quantiles(abs(ingest_lag_ms), 100)[offset(99)] as p99_lag_ms
     from {{ ref('fct_trades') }}
     where event_date >= date_sub(current_date(), interval 1 day)
+      -- Backfilled rows are excluded deliberately. Their lag is the duration
+      -- of the outage they recovered from, so including them means any
+      -- successful recovery fails the latency SLA - punishing the fix rather
+      -- than the fault. Found by the recovery drill (docs/recovery-drill.md).
+      and not is_backfilled
     group by 1
 
 )
