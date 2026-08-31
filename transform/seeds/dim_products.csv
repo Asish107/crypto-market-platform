@@ -1,0 +1,4 @@
+product_id,base_currency,quote_currency,quote_increment,base_min_size,display_name
+BTC-USD,BTC,USD,0.01,0.00000001,Bitcoin / US Dollar
+ETH-USD,ETH,USD,0.01,0.00000001,Ethereum / US Dollar
+SOL-USD,SOL,USD,0.01,0.00000001,Solana / US Dollar

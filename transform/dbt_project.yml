@@ -20,6 +20,11 @@ vars:
   # explicit backfill, not by the hourly run silently doing more work.
   lookback_days: 3
 
+  # 365 * 24 * 60. Crypto never closes, so the equity convention of 252
+  # trading days is simply wrong here - using it scales every volatility
+  # number by about 2.4x, and the result still looks entirely plausible.
+  minutes_per_year: 525600
+
   # NOTE: there was a `min_real_trade_id: 1e9` var here to exclude synthetic
   # rows. It silently deleted ETH-USD and SOL-USD entirely - their trade id
   # counters are per-product and sit at ~839M and ~351M, well below a threshold

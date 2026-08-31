@@ -112,3 +112,84 @@ models:
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [trade_id, product_id]
+
+  - name: fct_bars_1m
+    description: >
+      OHLCV bars at one-minute grain, with VWAP and taker-side volume
+      imbalance. Rolled up rather than recomputed for coarser intervals.
+    config:
+      contract:
+        enforced: true
+      on_schema_change: fail
+
+    columns:
+      - name: product_id
+        data_type: string
+        constraints: [{type: not_null}]
+        data_tests:
+          - relationships:
+              to: ref('dim_products')
+              field: product_id
+
+      - name: bar_start
+        data_type: timestamp
+        constraints: [{type: not_null}]
+      - name: bar_end
+        data_type: timestamp
+        constraints: [{type: not_null}]
+
+      - name: open
+        data_type: numeric
+        constraints: [{type: not_null}]
+      - name: high
+        data_type: numeric
+        constraints: [{type: not_null}]
+      - name: low
+        data_type: numeric
+        constraints: [{type: not_null}]
+      - name: close
+        data_type: numeric
+        constraints: [{type: not_null}]
+
+      - name: volume
+        data_type: numeric
+        constraints: [{type: not_null}]
+        data_tests:
+          - dbt_utils.expression_is_true: {expression: "> 0"}
+      - name: quote_volume
+        data_type: numeric
+      - name: trade_count
+        data_type: int64
+        data_tests:
+          - dbt_utils.expression_is_true: {expression: ">= 1"}
+
+      - name: vwap
+        data_type: numeric
+        description: Volume-weighted, not a mean of prices - dust trades must not weigh as much as blocks.
+
+      - name: buy_volume
+        data_type: numeric
+        description: Volume where the TAKER was the buyer, i.e. buyers crossed the spread.
+      - name: sell_volume
+        data_type: numeric
+      - name: volume_imbalance
+        data_type: numeric
+        description: (buy - sell) / total, in [-1, 1]. Positive means buyers were the aggressors.
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -1
+              max_value: 1
+
+      - name: avg_ingest_lag_ms
+        data_type: int64
+      - name: first_trade_id
+        data_type: int64
+      - name: last_trade_id
+        data_type: int64
+      - name: event_date
+        data_type: date
+        constraints: [{type: not_null}]
+
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [product_id, bar_start]

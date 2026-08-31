@@ -40,12 +40,67 @@ flattened as (
         -- Each change is [side, price, size].
         json_value(change, '$[0]')                       as side,
         cast(json_value(change, '$[1]') as numeric)      as price,
-        cast(json_value(change, '$[2]') as numeric)      as size
+        cast(json_value(change, '$[2]') as numeric)      as size,
+
+        -- Position of this change WITHIN its message. One l2update carries
+        -- many changes, all sharing the message's timestamp, and their array
+        -- order is their sequence: the same price level can be removed and
+        -- re-added inside a single message. Without this, ordering by time
+        -- alone ties and the final state of that level is picked arbitrarily -
+        -- which produced a book with the ask BELOW the bid.
+        change_index
 
     from raw_events e,
          unnest(json_query_array(e.payload, '$.changes')) as change
+         with offset as change_index
     where e.event_type = 'l2update'
 
+),
+
+-- Snapshots carry the whole book as bids[] and asks[] rather than a changes[]
+-- array. They are the ONLY way to establish absolute state - deltas alone
+-- describe changes to a book you do not have. Dropping them, as this model
+-- originally did, makes reconstruction impossible.
+-- BigQuery requires a CONSTANT path for JSON_QUERY_ARRAY, so bids and asks
+-- cannot be selected through a lookup - they need one branch each.
+snapshot_levels as (
+
+    select
+        e.product_id,
+        e.event_type,
+        timestamp(e.event_time)                          as event_time,
+        timestamp(e.ingest_time)                         as ingest_time,
+        e.publish_time,
+        'buy'                                            as side,
+        cast(json_value(level, '$[0]') as numeric)       as price,
+        cast(json_value(level, '$[1]') as numeric)       as size,
+        0                                                as change_index
+    from raw_events e,
+         unnest(json_query_array(e.payload, '$.bids')) as level
+    where e.event_type = 'snapshot'
+
+    union all
+
+    select
+        e.product_id,
+        e.event_type,
+        timestamp(e.event_time),
+        timestamp(e.ingest_time),
+        e.publish_time,
+        'sell',
+        cast(json_value(level, '$[0]') as numeric),
+        cast(json_value(level, '$[1]') as numeric),
+        0
+    from raw_events e,
+         unnest(json_query_array(e.payload, '$.asks')) as level
+    where e.event_type = 'snapshot'
+
+),
+
+combined as (
+    select * from flattened
+    union all
+    select * from snapshot_levels
 )
 
 select
@@ -54,6 +109,7 @@ select
     side,
     price,
     size,
+    change_index,
 
     -- A size of zero is a REMOVAL, not a resting order of zero size. Any model
     -- reconstructing book state must treat it as a delete; treating it as a
@@ -67,4 +123,4 @@ select
     date(event_time)                                     as event_date,
     timestamp_trunc(event_time, MINUTE)                  as event_minute
 
-from flattened
+from combined

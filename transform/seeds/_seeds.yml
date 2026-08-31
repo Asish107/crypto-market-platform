@@ -1,0 +1,18 @@
+version: 2
+
+seeds:
+  - name: dim_products
+    description: >
+      Static product metadata. A seed rather than an API call because it
+      changes roughly never, and a mart that cannot build because an exchange
+      endpoint is down is a bad trade.
+    config:
+      schema: marts
+      column_types:
+        quote_increment: numeric
+        base_min_size: numeric
+    columns:
+      - name: product_id
+        data_tests: [unique, not_null]
+      - name: quote_increment
+        description: Minimum price movement. The tick size - a spread cannot be smaller than this.
