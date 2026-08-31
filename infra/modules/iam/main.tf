@@ -66,6 +66,9 @@ resource "google_project_iam_member" "deployer" {
     "roles/compute.admin",
     "roles/serviceusage.serviceUsageAdmin",
     "roles/artifactregistry.admin",
+    # Log-based metrics are configured through the Logging API, not the
+    # Monitoring one - monitoring.editor does not reach them.
+    "roles/logging.configWriter",
   ])
 
   project = var.project_id
