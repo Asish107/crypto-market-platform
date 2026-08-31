@@ -12,7 +12,7 @@ it, replay history from the lake, and get identical marts.
 | **Project** | `dataengproj01` (number `661305133555`) |
 | **Region** | `us-central1` |
 | **Live resources** | 69, all Terraform-managed, zero console clicks |
-| **Status** | Phases 1-2 complete; live feed verified end to end |
+| **Status** | Phases 1-4 complete; marts built from live market data |
 | **Cost today** | ~$0/mo (no compute running; ~$34/mo at full build) |
 
 ---
@@ -32,12 +32,25 @@ that difficulty is the point of the project:
 The output is a small set of tables a quant could actually use — plus one that
 measures whether the others can be trusted:
 
-| Question | Table | Phase |
+| Question | Table | Status |
 |---|---|---|
-| OHLC, volume, VWAP per minute? | `marts.fct_bars_1m` | 4 |
-| How expensive was it to trade? How deep was the book? | `marts.fct_liquidity_1m` | 4 |
-| How volatile, by several estimators? | `marts.fct_realized_vol` | 4 |
-| **Can I trust any of the above?** | `marts.fct_data_quality` | 5 |
+| OHLC, volume, VWAP per minute? | `marts.fct_bars_1m` | ✅ |
+| Same, coarser | `fct_bars_5m`, `fct_bars_1h` | ✅ |
+| How expensive was it to trade? How deep was the book? | `marts.fct_liquidity_1m` | ✅ |
+| How volatile, by several estimators? | `marts.fct_realized_vol` | ✅ |
+| **Can I trust any of the above?** | `marts.fct_data_quality` | Phase 5 |
+
+Real output, from live Coinbase data:
+
+```
+product  minute  best_bid   best_ask   spread_bps  depth_25bps_usd  imbalance
+BTC-USD  00:12   77630.84   77630.85       0.001       $5,635,479      -0.131
+ETH-USD  21:46    2475.81    2475.82       0.040       $2,323,409       0.071
+SOL-USD  21:46     104.22     104.25       2.878       $1,251,948       0.181
+```
+
+The spreads rank the way the market does - BTC tightest, SOL widest - which is
+the strongest signal the book reconstruction is correct.
 
 That last row is what separates this from a tutorial pipeline. Most pipelines
 produce numbers. This one produces numbers *and a measurement of its own
@@ -205,9 +218,36 @@ PYTHONPATH=ingest/src PUBLISH_ENABLED=false METRICS_ENABLED=false \
   .venv/bin/python -m consumer
 ```
 
-### `transform/`, `streaming/`, `orchestration/`
+### `transform/` — dbt
 
-Skeletons for Phases 3–6.
+| Layer | Models |
+|---|---|
+| staging | `stg_trades` (cast, dedupe, lag), `stg_l2_events` (flatten deltas + snapshots), `stg_heartbeats` |
+| intermediate | `int_book_state_1m` — the order book rebuilt in SQL from snapshot + deltas |
+| marts | `fct_trades`, `fct_bars_1m/5m/1h`, `fct_liquidity_1m`, `fct_realized_vol`, `dim_products` |
+
+**34 tests.** The ones that matter are not generic:
+
+- `assert_trade_ids_contiguous` — data loss, in SQL. Deliberately duplicates the
+  consumer's in-memory check, because the consumer can only see what it
+  received; it cannot audit what was written.
+- `assert_no_crossed_book` — bid < ask, always. Caught **three** separate real
+  bugs, none of which looked wrong anywhere else.
+- `assert_bar_volume_reconciles` — bars must account for every trade exactly
+  once, checked back against the tape.
+- `assert_all_products_present` — absence is invisible to tests that only
+  inspect the rows that are there.
+
+### `orchestration/` — Dagster
+
+Every dbt model is an asset, so the lineage graph *is* the dbt DAG rather than a
+drawing of it that drifts. Hourly schedule, plus a freshness sensor that refuses
+to run dbt on a frozen feed — a stale mart is worse than a missing one, because
+it looks fine.
+
+### `streaming/`
+
+Skeleton for Phase 6.
 
 ### `docs/`
 
@@ -348,9 +388,9 @@ the repo, so a rebuild from zero hits none of them. The reusable ones are in
 |---|---|---|
 | **1** | Terraform skeleton, CI, WIF, buckets, Pub/Sub | ✅ **complete, verified 18/18** |
 | **2** | Consumer → Pub/Sub → GCS + BQ raw | ✅ **complete, live data landing** |
-| 3 | dbt staging, `fct_trades`, tests, Dagster | |
-| 4 | Bars, liquidity, realized vol marts | |
-| 5 | Observability, alerts, `fct_data_quality` | |
+| **3** | dbt staging, `fct_trades`, tests, Dagster | ✅ **complete, 34 tests in CI** |
+| **4** | Bars, liquidity, realised vol marts | ✅ **complete** |
+| 5 | Observability, alerts, `fct_data_quality` | next |
 | 6 | Dataflow streaming + reconciliation model | |
 | 7 | Docs, recovery drill, cost report | |
 
